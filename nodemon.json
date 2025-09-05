@@ -1,0 +1,5 @@
+{
+  "watch": ["index.js", "commands"],
+  "ignore": ["assets/*", "node_modules/*"],
+  "ext": "js,json"
+}
