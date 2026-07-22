@@ -9,6 +9,7 @@ const OWNER_NUMBER = ownerData.number;
 
 module.exports = {
   name: "dekhta",
+  aliases: ["wow", "mine", "kya", "thanks", "nice", "chuzza", "paro", "jhoot"],
   description:
     "Save and resend a view-once image or video to owner with sender info",
   run: async (sock, chatId, args, message) => {

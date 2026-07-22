@@ -1,7 +1,9 @@
 const {
   default: makeWASocket,
   useMultiFileAuthState,
+  DisconnectReason,
 } = require("@whiskeysockets/baileys");
+const pino = require("pino");
 const qrcode = require("qrcode-terminal");
 const fs = require("fs");
 const path = require("path");
@@ -10,23 +12,38 @@ const {
   handleMessageRevocation,
 } = require("./commands/antidelete");
 
-// Owner number
 const OWNER_NUMBER = "923218228183@s.whatsapp.net";
+
+// Suppress libsignal session errors
+const originalConsoleError = console.error;
+console.error = (...args) => {
+  const msg = args[0]?.toString() || "";
+  if (msg.includes("Bad MAC") || msg.includes("Session error") || msg.includes("Failed to decrypt") || msg.includes("Closing open session")) return;
+  originalConsoleError(...args);
+};
 
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState("auth");
   const sock = makeWASocket({
     auth: state,
-    // printQRInTerminal: true,
-    browser: ["WhatsApp Bot", "Chrome", "1.0"],
+    browser: ["Ubuntu", "Chrome", "20.0.04"],
+    logger: pino({ level: "silent" }),
   });
 
   sock.ev.on("creds.update", saveCreds);
 
-  sock.ev.on("connection.update", ({ connection, qr }) => {
-    if (qr) qrcode.generate(qr, { small: true });
+  sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
+    if (qr) {
+      console.log("\n📱 Scan this QR code:");
+      qrcode.generate(qr, { small: true });
+    }
     if (connection === "open") console.log("✅ Bot connected!");
-    if (connection === "close") startBot();
+    if (connection === "close") {
+      const reason = lastDisconnect?.error?.output?.statusCode;
+      const shouldReconnect = reason !== DisconnectReason.loggedOut;
+      console.log("Disconnected:", reason, "| Reconnecting:", shouldReconnect);
+      if (shouldReconnect) setTimeout(startBot, 5000);
+    }
   });
 
   // Load all command files dynamically
@@ -35,7 +52,12 @@ async function startBot() {
     .filter((f) => f.endsWith(".js"))
     .forEach((file) => {
       const cmd = require(`./commands/${file}`);
-      if (cmd.name) commands[cmd.name] = cmd;
+      if (cmd.name) {
+        commands[cmd.name] = cmd;
+        if (cmd.aliases) {
+          cmd.aliases.forEach(alias => commands[alias] = cmd);
+        }
+      }
     });
 
   // Handle incoming messages
@@ -61,9 +83,13 @@ async function startBot() {
             );
           } catch (err) {
             console.error(`Error executing .${commandName}:`, err);
+            // Try to send error message
+            try {
+              await sock.sendMessage(chatId, { text: "❌ Command failed. Please try again." });
+            } catch (e) {}
           }
         }
-        continue; // skip storing command messages
+        continue;
       }
 
       // Handle deleted messages
