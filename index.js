@@ -12,7 +12,9 @@ const {
   handleMessageRevocation,
 } = require("./commands/antidelete");
 
-const OWNER_NUMBER = "923218228183@s.whatsapp.net";
+const ownerFilePath = path.join(__dirname, "data/owner.json");
+const ownerData = fs.existsSync(ownerFilePath) ? JSON.parse(fs.readFileSync(ownerFilePath, "utf-8")) : { number: "923218228183@s.whatsapp.net" };
+const OWNER_NUMBER = ownerData.number;
 
 // Suppress libsignal session errors
 const originalConsoleError = console.error;
